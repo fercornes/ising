@@ -3,88 +3,94 @@
 #include <stdlib.h>
 #include <math.h>
 
-int metropolis(int *lattice, int n, float T) {
-   
-//calculo la energía inicial (utilizo bloques tipo P)	
-	int fila,columna,e_inicial,actual,abajo,derecha,i,indice;
-	e_inicial=0;	
-	for (fila=0;fila<n-1;fila++)
-	{
-		for(columna=0;columna<n-1;columna++)
-		{	
-		actual=fila*n+columna;
-		abajo=actual+n;
-		derecha=actual+1;	
-		e_inicial=e_inicial+lattice[actual]*lattice[abajo]+lattice[actual]*lattice[derecha];
-		}
-	}
-	
-	//calculo la interacción del spin ubicado en el extremo inferior derecho de la red
-	e_inicial=e_inicial+lattice[actual+n+1]*lattice[abajo]+lattice[actual+n+1]*lattice[derecha];
+int metropolis(int *lattice, int n, int j, int b, int seg, double *vec_exp, double *energ, double *m) {
+   	
+	//int im;
+	//int indice;
+	//indice = 0;
+	//for (im = 0; im < 2; im++) indices[im] = 0;	
+	//pick_site(lattice,n,&indice);
 
-	//Condiciones periódicas
-	for (i=0;i<n;i++) 
-	{
-		e_inicial=e_inicial+lattice[i]*lattice[(n-1)*n+i]+lattice[n*i]*lattice[n*i+n-1];
-	}
-
-	indice=pick_site(lattice,n);
-	flip(lattice,n,T,indice);
-	//printf("energia=%i\n",e_inicial);
+	int indices[2];
+	pick_site(lattice,n,indices);
+	flip(lattice,n,j,b,seg,indices,vec_exp,energ,m);
 
    return 0;
 }
 
-int pick_site(int *lattice, int n) {
-	double e;
-	e = n*n*(double)rand()/(double)RAND_MAX;
-	//printf("%g\n",e);
-  return floor(e);
+int pick_site(int *lattice, int n, int *indices) {
+	
+	for (int ia = 0; ia < 2; ia++) indices[ia] = rand()%n;
+
+   return 0;
 }
 
-int flip(int *lattice, int n, float T, int indice) {
+int flip(int *lattice, int n, int j, int b, int seg, int *indices, double *vec_exp, double *energ, double *m) {
+	
 	//calculo la energía con sus vecinos sin "flipear" ("sumo" las orientaciones de los vecinos)
-	int energia,ei;
-	float prob;
-	energia = 0;
-	ei=0;	
-	prob=0.0;
-
+	int energia_inic,dE,dM,fila,columna,actual,abajo,arriba,derecha,izquierda,diag_ab,diag_ar,diag_iz,diag_de;
+	double p,es;	
+	
 	//la sumatoria la organizo así: izquierda derecha abajo arriba
-	if (indice<n) //primera fila
-	{
-		if (indice==0) ei=lattice[indice+n-1]+lattice[indice+1]+lattice[indice+n]+lattice[indice+n*(n-1)];
-		else if (indice==n-1) ei=lattice[indice-1]+lattice[indice-n+1]+lattice[indice+n]+lattice[indice+n*(n-1)];
-		else ei=lattice[indice-1]+lattice[indice+1]+lattice[indice+n]+lattice[indice+n*(n-1)];
-	}
-	else if (indice>=n*(n-1)) //última fila
-	{
-		if (indice==n*(n-1)) ei=lattice[indice+n-1]+lattice[indice+1]+lattice[indice-n*(n-1)]+lattice[indice-n];
-		else if (indice==n*n-1) ei=lattice[indice-1]+lattice[indice-n+1]+lattice[indice-n*(n-1)]+lattice[indice-n];
-		else ei=lattice[indice-1]+lattice[indice+1]+lattice[indice-n*(n-1)]+lattice[indice-n];
-	}
-	else  //filas interiores
-	{
-		if (indice % n == 0) ei=lattice[indice+n-1]+lattice[indice+1]+lattice[indice+n]+lattice[indice-n];
-		else if ((indice+1) % n == 0) ei=lattice[indice-1]+lattice[indice-n+1]+lattice[indice+n]+lattice[indice-n];
-		else ei=lattice[indice-1]+lattice[indice+1]+lattice[indice+n]+lattice[indice-n];
-	}
 	
-	energia=ei*lattice[indice]; //energía sin flipear
-	//printf("indice=%i\tei=%i\tenergia=%i\n",indice,ei,energia);
-	
-	//la energía si "flipeo" es -energia. Así que me fijo si "energía" (sin flipear) es positiva o negativa. Si es positiva entonces cuando flipeo llego a un estado de menor energía. Y viceversa. 
+	energia_inic = 0;
+	fila=indices[0];
+	columna=indices[1];
+	actual=fila*n+columna;
+	abajo=(fila-1+n)%n;
+	arriba=(fila+1+n)%n;
+	izquierda=(columna-1+n)%n;
+	derecha=(columna+1+n)%n;
 
-	if (energia>0) lattice[indice]=-lattice[indice]; //si flipeo llego a un estado de menor energia, entonces lo "acepto"
-	else 
+	if (seg != 0) //ingresa solamente si considero la interacción a segundos vecinos
 	{
-		prob=exp(2*energia/T); //en este caso Ef>=Ei ya que energia<=0
-		double e;
-		e = (double)rand()/(double)RAND_MAX;
-		//printf("%g\n",e);
-		if (e<=prob) lattice[indice]=-lattice[indice];
-		else lattice[indice]=lattice[indice];
+		diag_ab=(fila-1+n)%n;
+		diag_ar=(fila+1+n)%n;
+		diag_iz=(columna-1+n)%n;
+		diag_de=(columna+1+n)%n;
+		energia_inic=j*lattice[actual]*(lattice[(fila*n+diag_iz+(n-1)*n)%(n*n)]+lattice[(fila*n+diag_de+(n-1)*n)%(n*n)]+lattice[(fila*n+diag_iz+n)%(n*n)]+lattice[(fila*n+diag_de+n)%(n*n)]);
 	}
+
+	//energía inicial del sistemita de 5 espines sin flipear
+	energia_inic=energia_inic-j*lattice[actual]*(lattice[fila*n+izquierda]+lattice[fila*n+derecha]+lattice[arriba*n+columna]+lattice[abajo*n+columna]);	
+
+	//si "flipeo" el spin central la energía final es -energía
+	dE=-2*energia_inic-2*b*lattice[actual]; 
+	//printf("dE=%i\n",dE);	
+	
+	dM=lattice[actual];
+	
+	if (dE < 0) 
+	{
+		lattice[actual]=-lattice[actual];	
+		dM=lattice[actual]-dM;
+	}
+	else //en ising.c dE=j*(-8,-4,0,4,8)
+	{
+		if (b == 0 && seg == 0 && j>0) p=vec_exp[dE/4+2];
+		else if (b == 0 && seg == 0 && j<0) p=vec_exp[2-dE/4];
+		//else if (b == 0 && seg != 0) p=vec_exp[dE/4+4];
+		//else if (j == 0) p=vec_exp[0]; //dE>0
+
+		es = (double)rand()/(double)RAND_MAX;
+
+		//printf("p=%g\tes=%g\n",p,es);
+		if (es <= p) 
+		{
+			lattice[actual]=-lattice[actual];
+			dM=lattice[actual]-dM;
+		}
+		else 
+		{
+			dE=0;
+			dM=0;
+		}
+	}
+	//printf("dE=%i\tdM=%i\n",dE,dM);
+
+	*energ=*energ+(double)dE/(double)(n*n);
+	*m=*m+(double)dM/(double)(n*n);	
+	//printf("energ=%g\tmag=%g\n",*energ,*m);
 
   return 0;
 }
